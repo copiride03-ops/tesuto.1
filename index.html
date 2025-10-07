@@ -1,260 +1,212 @@
+<!-- 第1回：HTML構造と基本スタイル -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>月選択式予定カレンダー</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>月選択予定カレンダー</title>
   <style>
-    body { font-family: sans-serif; text-align: center; }
-    table { border-collapse: collapse; margin: 20px auto; }
-    th, td {
-      border: 1px solid #ccc;
-      padding: 5px;
-      width: 120px;
-      height: 100px;
-      vertical-align: top;
-      position: relative;
-    }
-    th { background-color: #f0f0f0; }
-    .weekday-row th {
-      height: 60px;
-      font-size: 18px;
-      background-color: #e0f7fa;
-      color: #00796b;
-    }
-    .today { background-color: #ffeeba; }
-    .tag {
-      font-size: 12px;
-      background: #dff0d8;
-      padding: 2px 4px;
-      margin: 2px;
-      border-radius: 4px;
-      display: inline-block;
-    }
-    .note {
-      font-size: 11px;
-      margin-top: 5px;
-      color: #555;
-      white-space: pre-wrap;
-      text-align: left;
-    }
-    select { margin: 10px; padding: 5px; }
-    .modal, .overlay {
-      display: none;
-      position: fixed;
-      z-index: 10;
-    }
-    .modal {
-      top: 30%;
-      left: 50%;
-      transform: translate(-50%, -30%);
-      background: white;
-      border: 1px solid #ccc;
-      padding: 20px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.3);
-    }
-    .overlay {
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.5);
-      z-index: 5;
-    }
+    body { font-family: sans-serif; text-align: center; background: #f9f9f9; }
+    h1 { margin-top: 20px; }
+    select { font-size: 1rem; padding: 5px; margin: 10px; }
+    table { margin: auto; border-collapse: collapse; width: 90%; max-width: 600px; }
+    th, td { border: 1px solid #ccc; padding: 8px; vertical-align: top; }
+    th { background: #eee; }
+    td.today { background: #ffeeba; }
+    .tag { font-weight: bold; color: #007bff; }
+    .note { font-size: 0.9em; color: #555; margin-top: 4px; }
+    #modal, #overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
+    #overlay { background: rgba(0,0,0,0.5); z-index: 9; }
+    #modal { background: white; z-index: 10; padding: 20px; margin: auto; top: 20%; left: 50%; transform: translateX(-50%); width: 300px; border-radius: 8px; box-shadow: 0 0 10px #333; }
+    #modal input, #modal textarea { width: 100%; margin: 5px 0; }
+    #modal button { margin: 5px; }
   </style>
 </head>
 <body>
-  <h1>月選択式予定カレンダー</h1>
-  <label for="monthSelect">表示する月:</label>
+  <h1>月選択予定カレンダー</h1>
+  <label for="monthSelect">表示する月：</label>
   <select id="monthSelect"></select>
   <div id="calendarArea"></div>
-  <!-- モーダル -->
-  <div class="overlay" id="overlay"></div>
-  <div class="modal" id="modal">
-    <h3 id="modal-date">予定追加</h3>
-    <label>タグ（例：年休）:</label><br>
-    <input type="text" id="tagInput"><br><br>
-    <label>詳細メモ:</label><br>
-    <textarea id="noteInput" rows="4" cols="30"></textarea><br><br>
+
+  <div id="overlay"></div>
+  <div id="modal">
+    <p id="modalDate"></p>
+    <input id="tagInput" placeholder="タグ（例：年休）" />
+    <textarea id="noteInput" rows="3" placeholder="メモ（例：旅行）"></textarea>
     <button onclick="saveSchedule()">保存</button>
-    <button onclick="updateSchedule()">更新</button>
     <button onclick="deleteSchedule()">削除</button>
-    <button onclick="closeModal()">キャンセル</button>
+    <button onclick="closeModal()">閉じる</button>
   </div>
 
-  <script>
-    const monthSelect = document.getElementById("monthSelect");
-    const calendarArea = document.getElementById("calendarArea");
-    const modal = document.getElementById("modal");
-    const overlay = document.getElementById("overlay");
-    const modalDate = document.getElementById("modal-date");
-    const tagInput = document.getElementById("tagInput");
-    const noteInput = document.getElementById("noteInput");
+<!-- 第2回：Google Sheets連携と月一覧生成 -->
+<script>
+  // ✅ Google Apps Scriptの公開URLをここに貼ってください
+  const scriptURL = "https://script.google.com/macros/s/AKfycbxsRQBnFrxg0LbL5W1zRXiCOpfCxg_l-BXxm3B1XMN2Vg5rdLUlxsuttUfi-1-Q0Bo8fQ/exec";
 
-    let selectedDateKey = "";
-    let selectedMonthKey = "";
-    let scheduleData = {};
-    let startYear = 2025;
-    let startMonth = 10;
-    let monthsList = [];
+  const monthSelect = document.getElementById("monthSelect");
+  const calendarArea = document.getElementById("calendarArea");
+  let monthsList = [];
+  const today = new Date();
 
-    const today = new Date();
-    const scriptURL = "https://script.google.com/macros/s/AKfycbzslfByvJIjUrMjBWaIQcxoSKaE7jnbMQ6Wod_EGOUqwyd6RpVhUGGwSaoBZQMpCiafUQ/exec";
+  // 🔧 補助関数：ゼロ埋め
+  function pad(n) {
+    return n.toString().padStart(2, "0");
+  }
 
-    function pad(n) {
-      return n < 10 ? "0" + n : n;
+  // 📅 月一覧を生成（過去3ヶ月〜未来3ヶ月）
+  function generateMonthList() {
+    monthsList = [];
+    for (let i = -3; i <= 3; i++) {
+      const date = new Date(today.getFullYear(), today.getMonth() + i, 1);
+      const y = date.getFullYear();
+      const m = date.getMonth() + 1;
+      const key = `${y}-${pad(m)}`;
+      monthsList.push(key);
+
+      const option = document.createElement("option");
+      option.value = key;
+      option.textContent = `${y}年${m}月`;
+      monthSelect.appendChild(option);
     }
-    async function loadScheduleFromSheets() {
-      const res = await fetch(scriptURL);
-      const rows = await res.json();
-      scheduleData = {};
-      for (const [date, tag, note] of rows) {
-        const [y, m] = date.split("-").map(Number);
-        const prefix = `schedule-${y}-${pad(m)}`;
-        if (!scheduleData[prefix]) scheduleData[prefix] = {};
-        scheduleData[prefix][date] = { tag, note };
+  }
+
+  // 📡 Google Sheetsから予定を取得して scheduleData に格納
+  async function loadScheduleFromSheets() {
+    const res = await fetch(scriptURL);
+    const rows = await res.json();
+    scheduleData = {};
+    for (const [date, tag, note] of rows) {
+      const [y, m] = date.split("-").map(Number);
+      const prefix = `schedule-${y}-${pad(m)}`;
+      if (!scheduleData[prefix]) scheduleData[prefix] = {};
+      scheduleData[prefix][date] = { tag, note };
+    }
+  }
+</script>
+
+<!-- 第3回：カレンダー描画とモーダル表示 -->
+<script>
+  let scheduleData = {};
+  let selectedDateKey = "";
+  let selectedMonthKey = "";
+
+  const modal = document.getElementById("modal");
+  const overlay = document.getElementById("overlay");
+  const modalDate = document.getElementById("modalDate");
+  const tagInput = document.getElementById("tagInput");
+  const noteInput = document.getElementById("noteInput");
+
+  function generateCalendar(year, month) {
+    calendarArea.innerHTML = "";
+    const table = document.createElement("table");
+    const thead = document.createElement("thead");
+    const weekdayRow = document.createElement("tr");
+    weekdayRow.innerHTML = `<th>日</th><th>月</th><th>火</th><th>水</th><th>木</th><th>金</th><th>土</th>`;
+    thead.appendChild(weekdayRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    const firstDay = new Date(year, month - 1, 1);
+    const lastDay = new Date(year, month, 0);
+    const startDay = firstDay.getDay();
+    const totalDays = lastDay.getDate();
+
+    const keyPrefix = `schedule-${year}-${pad(month)}`;
+    let row = document.createElement("tr");
+    for (let i = 0; i < startDay; i++) row.appendChild(document.createElement("td"));
+
+    for (let day = 1; day <= totalDays; day++) {
+      const cell = document.createElement("td");
+      cell.textContent = day;
+      const key = `${year}-${pad(month)}-${pad(day)}`;
+      cell.onclick = () => openModal(keyPrefix, key, year, month, day);
+
+      if (year === today.getFullYear() && month === today.getMonth() + 1 && day === today.getDate()) {
+        cell.classList.add("today");
+      }
+
+      const data = scheduleData[keyPrefix]?.[key];
+      if (data) {
+        if (data.tag) {
+          const tag = document.createElement("div");
+          tag.className = "tag";
+          tag.textContent = data.tag;
+          cell.appendChild(tag);
+        }
+        if (data.note) {
+          const note = document.createElement("div");
+          note.className = "note";
+          note.textContent = data.note;
+          cell.appendChild(note);
+        }
+      }
+
+      row.appendChild(cell);
+      if ((startDay + day) % 7 === 0 || day === totalDays) {
+        tbody.appendChild(row);
+        row = document.createElement("tr");
       }
     }
 
-    function generateCalendar(year, month) {
-      calendarArea.innerHTML = "";
-      const table = document.createElement("table");
-      const thead = document.createElement("thead");
-      const weekdayRow = document.createElement("tr");
-      weekdayRow.className = "weekday-row";
-      weekdayRow.innerHTML = `<th>日</th><th>月</th><th>火</th><th>水</th><th>木</th><th>金</th><th>土</th>`;
-      thead.appendChild(weekdayRow);
-      table.appendChild(thead);
+    table.appendChild(tbody);
+    calendarArea.appendChild(table);
+  }
 
-      const tbody = document.createElement("tbody");
-      const firstDay = new Date(year, month - 1, 1);
-      const lastDay = new Date(year, month, 0);
-      const startDay = firstDay.getDay();
-      const totalDays = lastDay.getDate();
+  function openModal(prefix, key, year, month, day) {
+    selectedDateKey = key;
+    selectedMonthKey = prefix;
+    modalDate.textContent = `${year}年${month}月${day}日の予定`;
+    const data = scheduleData[prefix]?.[key] || {};
+    tagInput.value = data.tag || "";
+    noteInput.value = data.note || "";
+    modal.style.display = "block";
+    overlay.style.display = "block";
+  }
 
-      const keyPrefix = `schedule-${year}-${pad(month)}`;
-      let row = document.createElement("tr");
-      for (let i = 0; i < startDay; i++) row.appendChild(document.createElement("td"));
+  function closeModal() {
+    modal.style.display = "none";
+    overlay.style.display = "none";
+  }
+</script>
 
-      for (let day = 1; day <= totalDays; day++) {
-        const cell = document.createElement("td");
-        cell.textContent = day;
-        const key = `${year}-${pad(month)}-${pad(day)}`;
-        cell.onclick = () => openModal(keyPrefix, key, year, month, day);
+<!-- 第4回（修正版）：保存・削除・初期化・閉じタグ -->
+<script>
+  async function saveSchedule() {
+    const payload = {
+      date: selectedDateKey,
+      tag: tagInput.value,
+      note: noteInput.value
+    };
 
-        if (year === today.getFullYear() && month === today.getMonth() + 1 && day === today.getDate()) {
-          cell.classList.add("today");
-        }
-
-        const data = scheduleData[keyPrefix]?.[key];
-        if (data) {
-          if (data.tag) {
-            const tag = document.createElement("div");
-            tag.className = "tag";
-            tag.textContent = data.tag;
-            cell.appendChild(tag);
-          }
-          if (data.note) {
-            const note = document.createElement("div");
-            note.className = "note";
-            note.textContent = data.note;
-            cell.appendChild(note);
-          }
-        }
-
-        row.appendChild(cell);
-        if ((startDay + day) % 7 === 0 || day === totalDays) {
-          tbody.appendChild(row);
-          row = document.createElement("tr");
-        }
-      }
-
-      table.appendChild(tbody);
-      calendarArea.appendChild(table);
-    }
-
-    function openModal(prefix, key, year, month, day) {
-      selectedDateKey = key;
-      selectedMonthKey = prefix;
-      modalDate.textContent = `${year}年${month}月${day}日の予定`;
-      const data = scheduleData[prefix]?.[key] || {};
-      tagInput.value = data.tag || "";
-      noteInput.value = data.note || "";
-      modal.style.display = "block";
-      overlay.style.display = "block";
-    }
-
-    function closeModal() {
-      modal.style.display = "none";
-      overlay.style.display = "none";
-    }
-    function saveSchedule() {
-      const payload = {
-        date: selectedDateKey,
-        tag: tagInput.value,
-        note: noteInput.value
-      };
-      fetch(scriptURL, {
-        method: "POST",
-        body: JSON.stringify(payload),
-        headers: { "Content-Type": "application/json" }
-      }).then(() => {
-        closeModal();
-        location.reload();
-      });
-    }
-
-    function updateSchedule() {
-      const payload = {
-        date: selectedDateKey,
-        tag: tagInput.value,
-        note: noteInput.value
-      };
-      fetch(scriptURL, {
-        method: "PUT",
-        body: JSON.stringify(payload),
-        headers: { "Content-Type": "application/json" }
-      }).then(() => {
-        closeModal();
-        location.reload();
-      });
-    }
-
-    function deleteSchedule() {
-      if (!confirm("この予定を削除しますか？")) return;
-      fetch(scriptURL, {
-        method: "DELETE",
-        body: JSON.stringify({ date: selectedDateKey }),
-        headers: { "Content-Type": "application/json" }
-      }).then(() => {
-        closeModal();
-        location.reload();
-      });
-    }
-
-    monthSelect.addEventListener("change", () => {
-      const [y, m] = monthSelect.value.split("-").map(Number);
-      generateCalendar(y, m);
+    await fetch(scriptURL, {
+      method: "POST",
+      body: JSON.stringify(payload),
+      headers: { "Content-Type": "application/json" }
     });
 
-    (async () => {
-      generateMonthList();
-      const currentKey = `${today.getFullYear()}-${pad(today.getMonth() + 1)}`;
-      if (!monthsList.includes(currentKey)) {
-        monthsList.push(currentKey);
-        const option = document.createElement("option");
-        option.value = currentKey;
-        option.textContent = `${today.getFullYear()}年${today.getMonth() + 1}月`;
-        monthSelect.appendChild(option);
-      }
+    closeModal();
+    await loadScheduleFromSheets();
+    const [y, m] = selectedDateKey.split("-").map(Number);
+    generateCalendar(y, m);
+  }
 
-      const savedMonth = localStorage.getItem("lastSelectedMonth");
-      monthSelect.value = monthsList.includes(savedMonth) ? savedMonth : currentKey;
+  async function deleteSchedule() {
+    alert("削除機能は未実装です。\n必要であれば doDelete() を追加できます。");
+    closeModal();
+  }
 
-      await loadScheduleFromSheets();
-      const [initY, initM] = monthSelect.value.split("-").map(Number);
-      generateCalendar(initY, initM);
-    })();
-  </script>
+  monthSelect.addEventListener("change", () => {
+    const [y, m] = monthSelect.value.split("-").map(Number);
+    generateCalendar(y, m);
+  });
+
+  // 🔧 初期化処理
+  (async () => {
+    generateMonthList();
+    monthSelect.value = `${today.getFullYear()}-${pad(today.getMonth() + 1)}`;
+    await loadScheduleFromSheets();
+    generateCalendar(today.getFullYear(), today.getMonth() + 1);
+  })();
+</script>
 </body>
-
 </html>
