@@ -40,7 +40,6 @@
 
 <!-- 第2回：Google Sheets連携と月一覧生成 -->
 <script>
-  // ✅ Google Apps Scriptの公開URLをここに貼ってください
   const scriptURL = "https://script.google.com/macros/s/AKfycbxsRQBnFrxg0LbL5W1zRXiCOpfCxg_l-BXxm3B1XMN2Vg5rdLUlxsuttUfi-1-Q0Bo8fQ/exec";
 
   const monthSelect = document.getElementById("monthSelect");
@@ -48,12 +47,10 @@
   let monthsList = [];
   const today = new Date();
 
-  // 🔧 補助関数：ゼロ埋め
   function pad(n) {
     return n.toString().padStart(2, "0");
   }
 
-  // 📅 月一覧を生成（過去3ヶ月〜未来3ヶ月）
   function generateMonthList() {
     monthsList = [];
     for (let i = -3; i <= 3; i++) {
@@ -70,7 +67,6 @@
     }
   }
 
-  // 📡 Google Sheetsから予定を取得して scheduleData に格納
   async function loadScheduleFromSheets() {
     const res = await fetch(scriptURL);
     const rows = await res.json();
@@ -210,3 +206,4 @@
 </script>
 </body>
 </html>
+
